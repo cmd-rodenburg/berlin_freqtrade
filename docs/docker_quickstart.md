@@ -2,6 +2,134 @@
 
 This page explains how to run the bot with Docker. It is not meant to work out of the box. You'll still need to read through the documentation and understand how to properly configure it.
 
+## Docker cheatsheet
+```
+# List running containers
+docker ps
+
+# List all containers (including stopped)
+docker ps -a
+
+# Stop a container
+docker stop freqtrade
+
+# Remove a container
+docker rm freqtrade
+
+# Remove all stopped containers
+docker container prune -f
+
+# Restart after making changes
+docker compose up -d --force-recreate
+
+# Rebuild everything (if dependencies change)
+docker compose up -d --build
+```
+3. ⚡ Common Freqtrade Commands (inside Docker)
+Run commands inside the container:
+
+```powershell
+# Enter the container shell
+docker compose exec freqtrade bash
+```
+
+Or run directly:
+
+```powershell
+docker compose exec freqtrade freqtrade --version
+docker compose exec freqtrade freqtrade list-exchanges
+```
+### Trading & Setup
+```powershell
+# Start live/dry-run trading
+docker compose up -d
+
+# Check logs
+docker compose logs -f
+
+# Stop the bot
+docker compose down
+```
+
+### Data Management
+```powershell
+# Download historical data (Binance, 5m candles, last 3 days)
+docker compose exec freqtrade freqtrade download-data --exchange binance --timeframe 5m --days 3
+```
+### Backtesting
+```powershell
+# Run backtest with ExampleStrategy
+docker compose exec freqtrade freqtrade backtesting \
+    --config /freqtrade/config.json \
+    --strategy ExampleStrategy
+```
+### Hyperoptimization
+```powershell
+docker compose exec freqtrade freqtrade hyperopt \
+    --config /freqtrade/config.json \
+    --strategy ExampleStrategy \
+    --hyperopt-loss SharpeHyperOptLoss
+```
+4. 📝 Minimal Config.json Example
+Save as config.json in repo root:
+
+```json
+{
+  "dry_run": true,
+  "exchange": {
+    "name": "binance",
+    "key": "YOUR_API_KEY",
+    "secret": "YOUR_API_SECRET"
+  },
+  "pair_whitelist": ["BTC/USDT", "ETH/USDT"],
+  "timeframe": "5m",
+  "stake_currency": "USDT",
+  "stake_amount": "10"
+}
+```
+⚠️ Never commit real API keys. Use .env.
+
+5. 🧠 Strategy Skeleton
+Place in user_data/strategies/ExampleStrategy.py:
+
+``` python
+from freqtrade.strategy.interface import IStrategy
+from pandas import DataFrame
+
+class ExampleStrategy(IStrategy):
+    timeframe = "5m"
+    minimal_roi = {"0": 0.02}
+    stoploss = -0.05
+
+    def populate_indicators(self, df: DataFrame, metadata: dict) -> DataFrame:
+        df["ema_fast"] = df["close"].ewm(span=12, adjust=False).mean()
+        df["ema_slow"] = df["close"].ewm(span=26, adjust=False).mean()
+        return df
+
+    def populate_buy_trend(self, df: DataFrame, metadata: dict) -> DataFrame:
+        df.loc[:, "buy"] = (df["ema_fast"] > df["ema_slow"]).astype("int")
+        return df
+
+    def populate_sell_trend(self, df: DataFrame, metadata: dict) -> DataFrame:
+        df.loc[:, "sell"] = (df["ema_fast"] < df["ema_slow"]).astype("int")
+        return df
+```
+
+6. 🛠️ Troubleshooting
+```
+Container name conflict → docker rm -f freqtrade
+
+Strategy not found → check it’s in user_data/strategies/, class name matches file name, no typos
+
+Permission issues on Windows → run PowerShell as Admin
+
+Data missing → run download-data before backtesting
+
+Logs → docker compose logs -f
+```
+
+
+
 ## Install Docker
 
 Start by downloading and installing Docker / Docker Desktop for your platform:
